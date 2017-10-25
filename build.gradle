@@ -1,0 +1,124 @@
+plugins {
+    id "com.bmuschko.docker-java-application" version "3.2.0"
+}
+
+group 'mrdunski'
+version project.hasProperty('v') ? project.ext.v : 'SNAPSHOT'
+
+apply plugin: 'groovy'
+apply plugin: 'java'
+apply plugin: 'application'
+apply plugin: "com.bmuschko.docker-java-application"
+
+mainClassName = 'com.leanforge.game.GameBootApplication'
+applicationDefaultJvmArgs = ["-Xmx256m"]
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    compile 'org.springframework.boot:spring-boot-starter-actuator:1.+'
+    compile 'org.springframework.boot:spring-boot-starter-web:1.+'
+    compile 'org.springframework.boot:spring-boot-starter-websocket:1.+'
+    compile 'com.github.Ullink:simple-slack-api:0.6.0'
+    compile 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:+'
+
+    testCompile "org.codehaus.groovy:groovy-all:2.4.10"
+    testCompile "org.spockframework:spock-core:1.1-groovy-2.4"
+    testCompile "org.spockframework:spock-spring:1.1-groovy-2.4"
+    testCompile group: 'cglib', name: 'cglib-nodep', version: '3.2.5'
+    testCompile "org.springframework.boot:spring-boot-starter-test:1.+"
+}
+
+task('generateK8sFile') {
+    mkdir('build')
+    file("build/${project.name}.yaml").text = """
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: soccero-locker
+  labels:
+    app: soccero-locker
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: soccero-locker
+  template:
+    metadata:
+      labels:
+        app: soccero-locker
+    spec:
+      containers:
+      - name: soccero-locker
+        image: mrdunski/soccero-locker:${project.version}
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SLACK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: slacksecret
+              key: slackToken
+        livenessProbe:
+          initialDelaySeconds: 60
+          httpGet:
+            path: /health
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: soccero-locker
+spec:
+  selector:
+    app: soccero-locker
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: soccero-locker
+spec:
+  rules:
+  - host: "soccero-locker.dev.kende.pl"
+    http:
+      paths:
+      - backend:
+          serviceName: soccero-locker
+          servicePort: 8080
+"""
+}
+
+task('dockerTagLatest', type: Exec, dependsOn: 'dockerBuildImage') {
+    executable 'docker'
+    args 'tag', "mrdunski/soccero-locker:${project.version}", "mrdunski/soccero-locker:latest"
+}
+
+task('dockerPushLatest', type: Exec, dependsOn: 'dockerTagLatest') {
+    executable 'docker'
+    args 'push', "mrdunski/soccero-locker:latest"
+}
+
+task('dockerPushProjectVersion', type: Exec, dependsOn: 'dockerBuildImage') {
+    executable 'docker'
+    args 'push', "mrdunski/soccero-locker:${project.version}"
+}
