@@ -10,17 +10,17 @@ targetCompatibility = 1.8
 
 
 repositories {
-    mavenLocal()
-    mavenCentral()
-    maven { url 'https://jitpack.io' }
     maven {
         url 'http://artifactory.dev.kende.pl/artifactory/libs-release'
     }
+    mavenLocal()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
-    compile 'org.springframework.boot:spring-boot-starter:1.+'
-    compile 'com.github.Ullink:simple-slack-api:0.6.0'
+    compile 'org.springframework.boot:spring-boot-starter-websocket:1.+'
+    compile 'com.github.Ullink:simple-slack-api:1.0.0'
 
     testCompile "org.codehaus.groovy:groovy-all:2.4.10"
     testCompile "org.spockframework:spock-core:1.1-groovy-2.4"
