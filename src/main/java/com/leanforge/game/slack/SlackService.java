@@ -64,7 +64,7 @@ public class SlackService {
         openSession();
         logger.debug("Adding reaction listener {}", callback);
         slackSession.addReactionAddedListener((event, session) -> {
-            if (event.getMessageID() == null || event.getChannel() == null || event.getUser().isBot()) {
+            if (event.getMessageID() == null || event.getChannel() == null || event.getUser().getId().equals(slackSession.sessionPersona().getId())) {
                 return;
             }
 
@@ -76,7 +76,7 @@ public class SlackService {
         openSession();
         logger.debug("Adding reaction listener {}", callback);
         slackSession.addReactionRemovedListener((event, session) -> {
-            if (event.getMessageID() == null || event.getChannel() == null || event.getUser().isBot()) {
+            if (event.getMessageID() == null || event.getChannel() == null || event.getUser().getId().equals(slackSession.sessionPersona().getId())) {
                 return;
             }
 
@@ -88,7 +88,7 @@ public class SlackService {
         openSession();
         logger.debug("Adding direct message listener {}", callback);
         slackSession.addMessagePostedListener((event, session) -> {
-            if (event.getChannel().isDirect() || event.getSender().isBot()) {
+            if (event.getChannel().isDirect() || event.getSender().getId().equals(slackSession.sessionPersona().getId())) {
                 return;
             }
             callback.handleMessage(new SlackMessage(event.getTimestamp(), event.getChannel().getId(), event.getSender().getId()), event.getMessageContent());
