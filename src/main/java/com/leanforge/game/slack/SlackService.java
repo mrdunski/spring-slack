@@ -12,7 +12,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 @Service
 public class SlackService {
@@ -87,11 +91,22 @@ public class SlackService {
     public synchronized void addChannelMessageListener(MessageCallback callback) {
         openSession();
         logger.debug("Adding direct message listener {}", callback);
+        ConcurrentHashMap.KeySetView<SlackMessage, Boolean> handled = ConcurrentHashMap.newKeySet();
         slackSession.addMessagePostedListener((event, session) -> {
             if (event.getChannel().isDirect() || event.getSender().getId().equals(slackSession.sessionPersona().getId())) {
                 return;
             }
-            callback.handleMessage(new SlackMessage(event.getTimestamp(), event.getChannel().getId(), event.getSender().getId()), event.getMessageContent());
+
+            SlackMessage message = new SlackMessage(event.getTimestamp(), event.getChannel().getId(), event.getSender().getId());
+            if (handled.add(message)) {
+                callback.handleMessage(message, event.getMessageContent());
+            }
+
+            Instant limit = Instant.now().minus(15, ChronoUnit.MINUTES);
+            handled.parallelStream()
+                    .filter(it -> it.getCreatedOn().isBefore(limit))
+                    .forEach(handled::remove);
+
         });
     }
 
