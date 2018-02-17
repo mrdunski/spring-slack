@@ -32,6 +32,16 @@ public class SlackService {
         slackSession.refetchUsers();
     }
 
+    public synchronized SlackMessage sendDirectMessage(String userId, String message, String... reactionCodes) {
+        openSession();
+        SlackUser userById = slackSession.findUserById(userId);
+        SlackChannel channel = slackSession.openDirectMessageChannel(userById).getReply().getSlackChannel();
+        SlackMessageHandle<SlackMessageReply> messageHandle = slackSession.sendMessage(channel, message);
+        SlackMessage slackMessage = toChannelMessage(channel, messageHandle);
+        addReactions(slackMessage, reactionCodes);
+        return slackMessage;
+    }
+
     public synchronized SlackMessage sendChannelMessage(String channelId, String message, String... reactionCodes) {
         openSession();
         logger.debug("Sending message to: {}", channelId);
@@ -93,7 +103,7 @@ public class SlackService {
         logger.debug("Adding direct message listener {}", callback);
         ConcurrentHashMap.KeySetView<SlackMessage, Boolean> handled = ConcurrentHashMap.newKeySet();
         slackSession.addMessagePostedListener((event, session) -> {
-            if (event.getChannel().isDirect() || event.getSender().getId().equals(slackSession.sessionPersona().getId())) {
+            if (event.getSender().getId().equals(slackSession.sessionPersona().getId())) {
                 return;
             }
 
@@ -123,6 +133,7 @@ public class SlackService {
         }
 
         try {
+            slackSession.disconnect();
             slackSession.connect();
         } catch (IOException e) {
             throw new IllegalStateException("Can't open slack session", e);
