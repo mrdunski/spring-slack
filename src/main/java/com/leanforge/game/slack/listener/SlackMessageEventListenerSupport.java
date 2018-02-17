@@ -7,11 +7,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -66,8 +70,9 @@ public class SlackMessageEventListenerSupport {
             logger.debug("Handling message for pattern {} in channel {}", pattern, msg.getChannelId());
             try {
                 invoker.invoke(msg, msg.getSenderId(), txt, matcher);
-            } catch (IllegalAccessException | InvocationTargetException e) {
+            } catch (Exception e) {
                 logger.error("Can't handle message", e);
+                reportError(msg.getChannelId(), e);
             }
         });
     }
@@ -86,8 +91,9 @@ public class SlackMessageEventListenerSupport {
             logger.debug("Handling reaction {} - {} in channel {}", reaction, action, message.getChannelId());
             try {
                 invoker.invoke(message, userId, null, null);
-            } catch (IllegalAccessException | InvocationTargetException e) {
+            } catch (Exception e) {
                 logger.error("Can't handle reaction", e);
+                reportError(message.getChannelId(), e);
             }
         };
 
@@ -99,6 +105,36 @@ public class SlackMessageEventListenerSupport {
                 slackService.addRemoveReactionListener(callback);
                 break;
         }
+    }
+
+    private void reportError(String channel, Exception e) {
+        findExceptionWithResponseStatus(new HashSet<>(), e).ifPresent(it -> {
+            String reason = it.getClass().getAnnotation(ResponseStatus.class).reason();
+            if (!reason.isEmpty()) {
+                slackService.sendChannelMessage(channel, "Error: " + reason);
+                return;
+            }
+
+            slackService.sendChannelMessage(channel, "Error: " + it.getMessage());
+        });
+    }
+
+    private Optional<Exception> findExceptionWithResponseStatus(Set<Exception> checked, Exception e) {
+        if (e.getClass().getAnnotation(ResponseStatus.class) != null) {
+            return Optional.of(e);
+        }
+
+        Throwable cause = e.getCause();
+
+        if (!(cause instanceof Exception)) {
+            return Optional.empty();
+        }
+
+        if (!checked.add((Exception) cause)) {
+            return Optional.empty();
+        }
+
+        return findExceptionWithResponseStatus(checked, (Exception) cause);
     }
 
     SlackMethodInvoker createAnnotationBasedInvoker(Method method, Object obj) {
@@ -131,7 +167,11 @@ public class SlackMessageEventListenerSupport {
                     params[i] = slackMessage;
                 }
             }
-            method.invoke(obj, params);
+            Object result = method.invoke(obj, params);
+
+            if (result instanceof String) {
+                slackService.sendChannelMessage(slackMessage.getChannelId(), (String) result);
+            }
         });
     }
 
