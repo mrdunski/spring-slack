@@ -20,7 +20,7 @@ repositories {
 
 dependencies {
     compile 'org.springframework.boot:spring-boot-starter-websocket:1.+'
-    compile 'com.github.Ullink:simple-slack-api:1.0.0'
+    compile 'com.github.Ullink:simple-slack-api:1.2.0'
     compile 'org.glassfish.tyrus.bundles:tyrus-standalone-client:1.8.3'
 
     testCompile "org.codehaus.groovy:groovy-all:2.4.10"
