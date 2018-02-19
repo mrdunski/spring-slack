@@ -53,6 +53,12 @@ public class SlackService {
         return slackMessage;
     }
 
+    public synchronized void sendTyping(String channelId) {
+        openSession();
+        SlackChannel channel = slackSession.findChannelById(channelId);
+        slackSession.sendTyping(channel);
+    }
+
     public synchronized SlackMessage updateMessage(SlackMessage message, String text, String... reactionCodes) {
         openSession();
         logger.debug("Updating message: {} - {}", message.getChannelId(), message.getTimestamp());

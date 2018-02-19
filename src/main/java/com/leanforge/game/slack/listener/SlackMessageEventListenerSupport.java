@@ -70,6 +70,9 @@ public class SlackMessageEventListenerSupport {
             }
             logger.debug("Handling message for pattern {} in channel {}", pattern, msg.getChannelId());
             try {
+                if (annotation.isLongRunning()) {
+                    slackService.sendTyping(msg.getChannelId());
+                }
                 invoker.invoke(msg, msg.getSenderId(), txt, matcher);
             } catch (Exception e) {
                 logger.error("Can't handle message", e);
@@ -137,7 +140,7 @@ public class SlackMessageEventListenerSupport {
     }
 
     private String stackedMessage(Exception e) {
-        return NestedExceptionUtils.buildMessage("Failed to handle message", e);
+        return NestedExceptionUtils.buildMessage("Failed to handle message. Contact bot author(s).", e);
     }
 
     private Optional<Exception> findExceptionWithResponseStatus(Set<Exception> checked, Exception e) {

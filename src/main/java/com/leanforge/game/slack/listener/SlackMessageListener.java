@@ -10,4 +10,5 @@ public @interface SlackMessageListener {
      * @return regular expression of handled message
      */
     String value();
+    boolean isLongRunning() default false;
 }
