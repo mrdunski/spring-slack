@@ -99,7 +99,7 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
         then:
         1 * slackService.addReactionListener(_)
         1 * slackService.addRemoveReactionListener(_)
-        1 * slackService.addChannelMessageListener(_)
+        1 * slackService.addMessageListener(_)
     }
 
 

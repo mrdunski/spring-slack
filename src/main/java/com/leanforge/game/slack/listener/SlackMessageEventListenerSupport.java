@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
@@ -62,7 +63,7 @@ public class SlackMessageEventListenerSupport {
         logger.info("Adding message listener for message {}", annotation.value());
         SlackMethodInvoker invoker = createAnnotationBasedInvoker(method, bean);
 
-        slackService.addChannelMessageListener((msg, txt) -> {
+        slackService.addMessageListener((msg, txt) -> {
             Matcher matcher = pattern.matcher(txt);
             if (!matcher.matches()) {
                 return;
@@ -70,6 +71,27 @@ public class SlackMessageEventListenerSupport {
             logger.debug("Handling message for pattern {} in channel {}", pattern, msg.getChannelId());
             try {
                 invoker.invoke(msg, msg.getSenderId(), txt, matcher);
+            } catch (Exception e) {
+                logger.error("Can't handle message", e);
+                reportError(msg.getChannelId(), e);
+            }
+        });
+    }
+
+    private void addThreadMessageHandler(Object bean, Method method) {
+        SlackThreadMessageListener annotation = method.getAnnotation(SlackThreadMessageListener.class);
+        Pattern pattern = Pattern.compile(annotation.value());
+        logger.info("Adding thread message listener for message {}", annotation.value());
+        SlackMethodInvoker invoker = createAnnotationBasedInvoker(method, bean);
+
+        slackService.addThreadListener((msg, threadId, txt) -> {
+            Matcher matcher = pattern.matcher(txt);
+            if (!matcher.matches()) {
+                return;
+            }
+            logger.debug("Handling message for pattern {} in channel {}", pattern, msg.getChannelId());
+            try {
+                invoker.invoke(msg, msg.getSenderId(), txt, matcher, threadId);
             } catch (Exception e) {
                 logger.error("Can't handle message", e);
                 reportError(msg.getChannelId(), e);
@@ -108,15 +130,14 @@ public class SlackMessageEventListenerSupport {
     }
 
     private void reportError(String channel, Exception e) {
-        findExceptionWithResponseStatus(new HashSet<>(), e).ifPresent(it -> {
-            String reason = it.getClass().getAnnotation(ResponseStatus.class).reason();
-            if (!reason.isEmpty()) {
-                slackService.sendChannelMessage(channel, "Error: " + reason);
-                return;
-            }
+        String msg = findExceptionWithResponseStatus(new HashSet<>(), e)
+                .flatMap(it -> Optional.of(it.getClass().getAnnotation(ResponseStatus.class).reason()).filter(v -> !v.isEmpty()))
+                .orElseGet(() -> stackedMessage(e));
+        slackService.sendChannelMessage(channel, msg);
+    }
 
-            slackService.sendChannelMessage(channel, "Error: " + it.getMessage());
-        });
+    private String stackedMessage(Exception e) {
+        return NestedExceptionUtils.buildMessage("Failed to handle message", e);
     }
 
     private Optional<Exception> findExceptionWithResponseStatus(Set<Exception> checked, Exception e) {
@@ -139,7 +160,7 @@ public class SlackMessageEventListenerSupport {
 
     SlackMethodInvoker createAnnotationBasedInvoker(Method method, Object obj) {
         Annotation[][] annotations = method.getParameterAnnotations();
-        return ((slackMessage, userId, messageContent, matcher) -> {
+        return ((slackMessage, userId, messageContent, matcher, threadId) -> {
             Object[] params = new Object[method.getParameterCount()];
             for (int i = 0; i < annotations.length; i++) {
                 for (int y = 0; y < annotations[i].length; y++) {
@@ -152,6 +173,10 @@ public class SlackMessageEventListenerSupport {
 
                     if (annotations[i][y] instanceof SlackChannelId) {
                         params[i] = slackMessage.getChannelId();
+                    }
+
+                    if (annotations[i][y] instanceof SlackThreadId) {
+                        params[i] = threadId;
                     }
 
                     if (annotations[i][y] instanceof SlackMessageRegexGroup) {
@@ -183,7 +208,14 @@ public class SlackMessageEventListenerSupport {
         return m.getAnnotation(SlackReactionListener.class) != null;
     }
 
+    @FunctionalInterface
     private interface SlackMethodInvoker {
-        void invoke(SlackMessage slackMessage, String userId, String messageContent, Matcher matcher) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException;
+        default void invoke(SlackMessage slackMessage, String userId) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+            this.invoke(slackMessage, userId, null, null, null);
+        }
+        default void invoke(SlackMessage slackMessage, String userId, String messageContent, Matcher matcher) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+            this.invoke(slackMessage, userId, messageContent, matcher, null);
+        }
+        void invoke(SlackMessage slackMessage, String userId, String messageContent, Matcher matcher, String threadId) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException;
     }
 }

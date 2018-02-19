@@ -98,25 +98,16 @@ public class SlackService {
         });
     }
 
-    public synchronized void addChannelMessageListener(MessageCallback callback) {
+    public synchronized void addMessageListener(MessageCallback callback) {
         openSession();
         logger.debug("Adding direct message listener {}", callback);
-        ConcurrentHashMap.KeySetView<SlackMessage, Boolean> handled = ConcurrentHashMap.newKeySet();
         slackSession.addMessagePostedListener((event, session) -> {
-            if (event.getSender().getId().equals(slackSession.sessionPersona().getId())) {
+            if (event.getSender().getId().equals(slackSession.sessionPersona().getId()) || event.getThreadTimestamp() != null) {
                 return;
             }
 
             SlackMessage message = new SlackMessage(event.getTimestamp(), event.getChannel().getId(), event.getSender().getId());
-            if (handled.add(message)) {
-                callback.handleMessage(message, event.getMessageContent());
-            }
-
-            Instant limit = Instant.now().minus(15, ChronoUnit.MINUTES);
-            handled.parallelStream()
-                    .filter(it -> it.getCreatedOn().isBefore(limit))
-                    .forEach(handled::remove);
-
+            callback.handleMessage(message, event.getMessageContent());
         });
     }
 
@@ -125,6 +116,21 @@ public class SlackService {
         SlackUser slackUser = slackSession.findUserById(userId);
         return ZoneId.of(slackUser.getTimeZone());
     }
+
+    public synchronized void addThreadListener(ThreadMessageCallback callback) {
+        slackSession.addMessagePostedListener((event, session) -> {
+            if (event.getSender().getId().equals(slackSession.sessionPersona().getId()) || event.getThreadTimestamp() == null) {
+                return;
+            }
+            callback.handleMessage(
+                    new SlackMessage(event.getTimestamp(), event.getChannel().getId(), event.getSender().getId()),
+                    event.getThreadTimestamp(),
+                    event.getMessageContent());
+
+        });
+    }
+
+
 
 
     private void openSession() {
@@ -188,5 +194,10 @@ public class SlackService {
     @FunctionalInterface
     public interface MessageCallback {
         void handleMessage(SlackMessage slackMessage, String content);
+    }
+
+    @FunctionalInterface
+    public interface ThreadMessageCallback {
+        void handleMessage(SlackMessage slackMessage, String threadId, String callback);
     }
 }
