@@ -58,7 +58,7 @@ public class SlackMessageEventListenerSupport {
 
         Stream.of(bean.getClass().getMethods())
                 .parallel()
-                .filter(this::isReactionCallback)
+                .filter(this::isThreadCallback)
                 .forEach(it -> addThreadMessageHandler(bean, it));
     }
 
@@ -214,6 +214,10 @@ public class SlackMessageEventListenerSupport {
 
     private boolean isReactionCallback(Method m) {
         return m.getAnnotation(SlackReactionListener.class) != null;
+    }
+
+    private boolean isThreadCallback(Method m) {
+        return m.getAnnotation(SlackThreadMessageListener.class) != null;
     }
 
     @FunctionalInterface
