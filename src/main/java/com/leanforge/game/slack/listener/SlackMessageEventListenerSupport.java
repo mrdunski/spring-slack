@@ -55,6 +55,11 @@ public class SlackMessageEventListenerSupport {
                 .parallel()
                 .filter(this::isReactionCallback)
                 .forEach(it -> addReactionHandler(bean, it));
+
+        Stream.of(bean.getClass().getMethods())
+                .parallel()
+                .filter(this::isReactionCallback)
+                .forEach(it -> addThreadMessageHandler(bean, it));
     }
 
     private void addMessageHandler(Object bean, Method method) {
