@@ -75,7 +75,7 @@ public class SlackMessageEventListenerSupport {
             }
             logger.debug("Handling message for pattern {} in channel {}", pattern, msg.getChannelId());
             try {
-                if (annotation.isLongRunning()) {
+                if (annotation.sendTyping()) {
                     slackService.sendTyping(msg.getChannelId());
                 }
                 invoker.invoke(msg, msg.getSenderId(), txt, matcher);
