@@ -139,7 +139,7 @@ public class SlackMessageEventListenerSupport {
 
     private void reportError(String channel, Exception e) {
         String msg = findExceptionWithResponseStatus(new HashSet<>(), e)
-                .flatMap(it -> Optional.of(it.getClass().getAnnotation(ResponseStatus.class).reason()).filter(v -> !v.isEmpty()))
+                .map(it -> Optional.of(it.getClass().getAnnotation(ResponseStatus.class).reason()).filter(v -> !v.isEmpty()).orElse(it.getMessage()))
                 .orElseGet(() -> stackedMessage(e));
         slackService.sendChannelMessage(channel, msg);
     }
