@@ -1,9 +1,6 @@
 package com.leanforge.game.slack;
 
-import com.ullink.slack.simpleslackapi.SlackChannel;
-import com.ullink.slack.simpleslackapi.SlackMessageHandle;
-import com.ullink.slack.simpleslackapi.SlackSession;
-import com.ullink.slack.simpleslackapi.SlackUser;
+import com.ullink.slack.simpleslackapi.*;
 import com.ullink.slack.simpleslackapi.replies.SlackMessageReply;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +44,21 @@ public class SlackService {
         logger.debug("Sending message to: {}", channelId);
         SlackChannel channel = slackSession.findChannelById(channelId);
         SlackMessageHandle<SlackMessageReply> messageHandle = slackSession.sendMessage(channel, message);
+        SlackMessage slackMessage = toChannelMessage(channel, messageHandle);
+        addReactions(slackMessage, reactionCodes);
+
+        return slackMessage;
+    }
+
+    public synchronized SlackMessage sendThreadMessage(String channelId, String threadId, String message, String... reactionCodes) {
+        openSession();
+        logger.debug("Sending message to: {}", channelId);
+        SlackChannel channel = slackSession.findChannelById(channelId);
+        SlackPreparedMessage preparedMessage = new SlackPreparedMessage.Builder()
+                .withMessage(message)
+                .withThreadTimestamp(threadId)
+                .build();
+        SlackMessageHandle<SlackMessageReply> messageHandle = slackSession.sendMessage(channel, preparedMessage);
         SlackMessage slackMessage = toChannelMessage(channel, messageHandle);
         addReactions(slackMessage, reactionCodes);
 

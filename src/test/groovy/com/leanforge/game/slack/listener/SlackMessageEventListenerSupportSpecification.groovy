@@ -15,6 +15,7 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
     ApplicationContext applicationContext = Mock(ApplicationContext)
 
     def handler = new TestHandler()
+    def badHandler = new BadHandler()
 
     @Subject
     SlackMessageEventListenerSupport slackMessageEventHandler
@@ -48,6 +49,7 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
         handler.messageContent == content
         handler.methodCalled
         handler.matchedText == 'upa12'
+        1 * slackService.sendChannelMessage('b', 'Test Response')
     }
 
     def "should invoke method with some params"() {
@@ -90,6 +92,7 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
         handler.slackMessage == null
         handler.messageContent == null
         handler.methodCalled
+        1 * slackService.addReactions(message, 'onion')
     }
 
 
@@ -102,6 +105,12 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
         1 * slackService.addMessageListener(_)
     }
 
+    def "should fail on bad handler"() {
+        when:
+        slackMessageEventHandler.addHandlers(badHandler)
+        then:
+        thrown(IllegalStateException)
+    }
 
 
     @SlackController
@@ -114,12 +123,13 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
         String matchedText
 
         @SlackReactionListener("x")
-        void thisIsExampleHandler1(SlackMessage slackMessage, @SlackUserId String userId, @SlackMessageContent String content, @SlackMessageRegexGroup(1) String group1 ) {
+        String thisIsExampleHandler1(SlackMessage slackMessage, @SlackUserId String userId, @SlackMessageContent String content, @SlackMessageRegexGroup(1) String group1 ) {
             this.slackMessage = slackMessage
             this.messageContent = content
             this.userId = userId
             this.matchedText = group1
             methodCalled = true
+            return 'Test Response'
         }
 
         @SlackReactionListener(value = "x", action = SlackReactionListener.Action.REMOVE)
@@ -130,7 +140,27 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
         }
 
         @SlackMessageListener("x")
-        void thisIsExampleHandler3() {
+        SlackReactionResponse thisIsExampleHandler3() {
+            methodCalled = true
+            new SlackReactionResponse("onion")
+        }
+    }
+
+    @SlackController
+    public class BadHandler {
+
+        SlackMessage slackMessage
+        String userId
+        String messageContent
+        boolean methodCalled = false
+        String matchedText
+
+        @SlackReactionListener("x")
+        void thisIsExampleHandler1(SlackMessage slackMessage, @SlackUserId String userId, @SlackMessageContent String content, @SlackMessageRegexGroup(1) String group1, String badParam) {
+            this.slackMessage = slackMessage
+            this.messageContent = content
+            this.userId = userId
+            this.matchedText = group1
             methodCalled = true
         }
     }

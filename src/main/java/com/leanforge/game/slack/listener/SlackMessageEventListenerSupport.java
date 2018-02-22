@@ -17,6 +17,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -45,7 +47,7 @@ public class SlackMessageEventListenerSupport {
     }
 
 
-    private void addHandlers(Object bean) {
+    void addHandlers(Object bean) {
         Stream.of(bean.getClass().getMethods())
                 .parallel()
                 .filter(this::isMessageCallback)
@@ -144,7 +146,11 @@ public class SlackMessageEventListenerSupport {
         slackService.sendChannelMessage(channel, msg);
     }
 
-    private String stackedMessage(Exception e) {
+    private String stackedMessage(Throwable e) {
+        if (e instanceof InvocationTargetException) {
+            return NestedExceptionUtils.buildMessage("Failed to handle message. Contact bot author(s).", e.getCause());
+        }
+
         return NestedExceptionUtils.buildMessage("Failed to handle message. Contact bot author(s).", e);
     }
 
@@ -167,43 +173,37 @@ public class SlackMessageEventListenerSupport {
     }
 
     SlackMethodInvoker createAnnotationBasedInvoker(Method method, Object obj) {
-        Annotation[][] annotations = method.getParameterAnnotations();
+
+        PrecompiledParams precompiledParams = new PrecompiledParams(method);
+
         return ((slackMessage, userId, messageContent, matcher, threadId) -> {
-            Object[] params = new Object[method.getParameterCount()];
-            for (int i = 0; i < annotations.length; i++) {
-                for (int y = 0; y < annotations[i].length; y++) {
-                    if (annotations[i][y] instanceof SlackUserId) {
-                        params[i] = userId;
-                    }
-                    if (annotations[i][y] instanceof SlackMessageContent) {
-                        params[i] = messageContent;
-                    }
 
-                    if (annotations[i][y] instanceof SlackChannelId) {
-                        params[i] = slackMessage.getChannelId();
-                    }
+            Object[] params = precompiledParams.buildParams(new InvocationData(slackMessage, userId, messageContent, matcher, threadId));
 
-                    if (annotations[i][y] instanceof SlackThreadId) {
-                        params[i] = threadId;
-                    }
-
-                    if (annotations[i][y] instanceof SlackMessageRegexGroup) {
-                        SlackMessageRegexGroup regexGroup = (SlackMessageRegexGroup) annotations[i][y];
-                        if (matcher != null) {
-                            params[i] = matcher.group(regexGroup.value());
-                        }
-                    }
-                }
-            }
-            for (int i = 0; i < method.getParameterCount(); i++) {
-                if (SlackMessage.class.equals(method.getParameterTypes()[i])) {
-                    params[i] = slackMessage;
-                }
-            }
             Object result = method.invoke(obj, params);
 
             if (result instanceof String) {
-                slackService.sendChannelMessage(slackMessage.getChannelId(), (String) result);
+                if (threadId == null) {
+                    slackService.sendChannelMessage(slackMessage.getChannelId(), (String) result);
+                } else {
+                    slackService.sendThreadMessage(slackMessage.getChannelId(), threadId, (String) result);
+                }
+            }
+
+            if (result instanceof SlackReactionResponse) {
+                slackService.addReactions(slackMessage, ((SlackReactionResponse) result).getReactionCodes());
+            }
+
+            if (result instanceof SlackMessageResponse) {
+                slackService.sendChannelMessage(slackMessage.getChannelId(), ((SlackMessageResponse) result).getMessage());
+            }
+
+            if (result instanceof SlackThreadMessageResponse) {
+                String threadToUse = threadId;
+                if (threadToUse != null) {
+                    threadToUse = slackMessage.getTimestamp();
+                }
+                slackService.sendThreadMessage(slackMessage.getChannelId(), threadToUse, ((SlackThreadMessageResponse) result).getMessage());
             }
         });
     }
@@ -229,5 +229,101 @@ public class SlackMessageEventListenerSupport {
             this.invoke(slackMessage, userId, messageContent, matcher, null);
         }
         void invoke(SlackMessage slackMessage, String userId, String messageContent, Matcher matcher, String threadId) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException;
+    }
+
+    private class PrecompiledParams {
+
+        private final Function<InvocationData, Object>[] precompiledParams;
+
+        public PrecompiledParams(Method method) {
+            Annotation[][] annotations = method.getParameterAnnotations();
+            int parameterCount = method.getParameterCount();
+            Function<InvocationData, Object>[] params = new Function[parameterCount];
+            for (int i = 0; i < annotations.length; i++) {
+                for (int y = 0; y < annotations[i].length; y++) {
+                    if (annotations[i][y] instanceof SlackUserId) {
+                        params[i] = InvocationData::getUserId;
+                    }
+                    if (annotations[i][y] instanceof SlackMessageContent) {
+                        params[i] = InvocationData::getMessageContent;
+                    }
+
+                    if (annotations[i][y] instanceof SlackChannelId) {
+                        params[i] = InvocationData::getMessageContent;
+                    }
+
+                    if (annotations[i][y] instanceof SlackThreadId) {
+                        params[i] = InvocationData::getThreadId;
+                    }
+
+                    if (annotations[i][y] instanceof SlackMessageRegexGroup) {
+                        SlackMessageRegexGroup regexGroup = (SlackMessageRegexGroup) annotations[i][y];
+                        params[i] = it -> {
+                            if (it.getMatcher() == null) {
+                                return null;
+                            }
+
+                            return it.getMatcher().group(regexGroup.value());
+                        };
+
+                    }
+                }
+            }
+            for (int i = 0; i < parameterCount; i++) {
+                if (SlackMessage.class.equals(method.getParameterTypes()[i])) {
+                    params[i] = InvocationData::getSlackMessage;
+                }
+            }
+
+            for (Object param : params) {
+                if (param == null) {
+                    throw new IllegalStateException("Bad definition of the listener: " + method.getDeclaringClass().getCanonicalName() + "#" + method.getName());
+                }
+            }
+
+            precompiledParams = params;
+        }
+
+        public Object[] buildParams(InvocationData data) {
+            return Stream.of(precompiledParams)
+                    .map(it -> it.apply(data))
+                    .toArray();
+        }
+    }
+
+    private class InvocationData {
+        private final SlackMessage slackMessage;
+        private final String userId;
+        private final String messageContent;
+        private final Matcher matcher;
+        private final String threadId;
+
+        public InvocationData(SlackMessage slackMessage, String userId, String messageContent, Matcher matcher, String threadId) {
+            this.slackMessage = slackMessage;
+            this.userId = userId;
+            this.messageContent = messageContent;
+            this.matcher = matcher;
+            this.threadId = threadId;
+        }
+
+        public SlackMessage getSlackMessage() {
+            return slackMessage;
+        }
+
+        public String getUserId() {
+            return userId;
+        }
+
+        public String getMessageContent() {
+            return messageContent;
+        }
+
+        public Matcher getMatcher() {
+            return matcher;
+        }
+
+        public String getThreadId() {
+            return threadId;
+        }
     }
 }
