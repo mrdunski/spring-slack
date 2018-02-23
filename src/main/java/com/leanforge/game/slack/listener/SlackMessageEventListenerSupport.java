@@ -249,7 +249,7 @@ public class SlackMessageEventListenerSupport {
                     }
 
                     if (annotations[i][y] instanceof SlackChannelId) {
-                        params[i] = InvocationData::getMessageContent;
+                        params[i] = it -> it.getSlackMessage().getChannelId();
                     }
 
                     if (annotations[i][y] instanceof SlackThreadId) {
