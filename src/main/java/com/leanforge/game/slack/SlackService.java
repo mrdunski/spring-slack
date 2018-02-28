@@ -9,11 +9,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.Optional;
 
 @Service
 public class SlackService {
@@ -194,6 +191,11 @@ public class SlackService {
     public String getChannelName(String channelId) {
         openSession();
         return slackSession.findChannelById(channelId).getName();
+    }
+
+    public Optional<String> getChannelId(String channelName) {
+        openSession();
+        return Optional.ofNullable(slackSession.findChannelByName(channelName)).map(SlackChannel::getId);
     }
 
     public String getUsername(String userId) {
