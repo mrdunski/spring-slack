@@ -10,7 +10,10 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.time.ZoneId;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 @Service
 public class SlackService {
@@ -34,6 +37,19 @@ public class SlackService {
         SlackMessage slackMessage = toChannelMessage(channel, messageHandle);
         addReactions(slackMessage, reactionCodes);
         return slackMessage;
+    }
+
+    public synchronized SlackMessage sendChannelMessage(String channelId, String message, SlackActions slackActions) {
+        openSession();
+        logger.debug("Sending message to: {}", channelId);
+        SlackChannel channel = slackSession.findChannelById(channelId);
+        SlackPreparedMessage preparedMessage = new SlackPreparedMessage.Builder()
+                .withMessage(message)
+                .withAttachments(Collections.singletonList(slackActions.toAttachment()))
+                .build();
+        SlackMessageHandle<SlackMessageReply> messageHandle = slackSession.sendMessage(channel, preparedMessage);
+
+        return toChannelMessage(channel, messageHandle);
     }
 
     public synchronized SlackMessage sendChannelMessage(String channelId, String message, String... reactionCodes) {
