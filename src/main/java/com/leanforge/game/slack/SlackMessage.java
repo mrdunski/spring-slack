@@ -10,12 +10,19 @@ public class SlackMessage implements Serializable {
     private String senderId;
     private Instant createdOn = Instant.now();
 
+    @Deprecated
     public SlackMessage(String timestamp, String channelId, String senderId) {
         this.timestamp = timestamp;
         this.channelId = channelId;
         this.senderId = senderId;
     }
 
+    public SlackMessage(String timestamp, String channelId) {
+        this.timestamp = timestamp;
+        this.channelId = channelId;
+    }
+
+    @Deprecated
     public String getSenderId() {
         return senderId;
     }

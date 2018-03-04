@@ -62,6 +62,11 @@ public class SlackMessageEventListenerSupport {
                 .parallel()
                 .filter(this::isThreadCallback)
                 .forEach(it -> addThreadMessageHandler(bean, it));
+
+        Stream.of(bean.getClass().getMethods())
+                .parallel()
+                .filter(this::isActionCallback)
+                .forEach(it -> addActionHandler(bean, it));
     }
 
     private void addMessageHandler(Object bean, Method method) {
@@ -105,6 +110,29 @@ public class SlackMessageEventListenerSupport {
             } catch (Exception e) {
                 logger.error("Can't handle message", e);
                 reportError(msg.getChannelId(), e);
+            }
+        });
+    }
+
+    private void addActionHandler(Object bean, Method method) {
+        SlackActionListener annotation = method.getAnnotation(SlackActionListener.class);
+        logger.info("Adding thread message listener for action {}.{}", annotation.actionName(), annotation.actionValue());
+        SlackMethodInvoker invoker = createAnnotationBasedInvoker(method, bean);
+
+        slackService.addActionListener((SlackMessage slackMessage, String userId, String actionName, String actionValue) -> {
+            if (!annotation.actionName().equals(actionName)) {
+                return;
+            }
+
+            if (!"*".equals(annotation.actionValue()) && !annotation.actionValue().equals(actionValue)) {
+                return;
+            }
+            logger.debug("Handling action {}.{} for user {}", actionName, actionValue, userId);
+            try {
+                invoker.invoke(slackMessage, userId, actionValue, null);
+            } catch (Exception e) {
+                logger.error("Can't handle message", e);
+                reportError(slackMessage.getChannelId(), e);
             }
         });
     }
@@ -218,6 +246,10 @@ public class SlackMessageEventListenerSupport {
 
     private boolean isThreadCallback(Method m) {
         return m.getAnnotation(SlackThreadMessageListener.class) != null;
+    }
+
+    private boolean isActionCallback(Method m) {
+        return m.getAnnotation(SlackActionListener.class) != null;
     }
 
     @FunctionalInterface

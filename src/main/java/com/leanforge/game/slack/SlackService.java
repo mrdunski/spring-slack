@@ -13,6 +13,8 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 @Service
@@ -22,6 +24,9 @@ public class SlackService {
 
     @Autowired
     SlackSession slackSession;
+
+
+    private final Set<ActionCallback> actionCallbacks = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     @Scheduled(fixedDelay = 30000)
     public synchronized void refreshUsers() {
@@ -142,6 +147,11 @@ public class SlackService {
         });
     }
 
+    public synchronized void addActionListener(ActionCallback callback) {
+        logger.debug("Adding action listener {}", callback);
+        actionCallbacks.add(callback);
+    }
+
     public synchronized ZoneId getUserTimezone(String userId) {
         openSession();
         SlackUser slackUser = slackSession.findUserById(userId);
@@ -162,6 +172,15 @@ public class SlackService {
     }
 
 
+    synchronized void fireActionCallbacks(String userId, SlackMessage parentMessage, String actionName, String actionValue, String callbackId) {
+        actionCallbacks.forEach(actionCallback -> {
+            try {
+                actionCallback.handleMessage(parentMessage, userId, actionName, actionValue);
+            } catch (Exception e) {
+                logger.error("Can't handle action", e);
+            }
+        });
+    }
 
 
     private void openSession() {
@@ -235,5 +254,10 @@ public class SlackService {
     @FunctionalInterface
     public interface ThreadMessageCallback {
         void handleMessage(SlackMessage slackMessage, String threadId, String callback);
+    }
+
+    @FunctionalInterface
+    public interface ActionCallback {
+        void handleMessage(SlackMessage slackMessage, String userId, String actionName, String actionValue);
     }
 }

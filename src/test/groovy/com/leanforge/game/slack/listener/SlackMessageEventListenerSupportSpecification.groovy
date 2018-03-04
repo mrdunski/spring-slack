@@ -103,6 +103,7 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
         1 * slackService.addReactionListener(_)
         1 * slackService.addRemoveReactionListener(_)
         1 * slackService.addMessageListener(_)
+        1 * slackService.addActionListener(_)
     }
 
     def "should fail on bad handler"() {
@@ -141,6 +142,12 @@ class SlackMessageEventListenerSupportSpecification extends Specification {
 
         @SlackMessageListener("x")
         SlackReactionResponse thisIsExampleHandler3() {
+            methodCalled = true
+            new SlackReactionResponse("onion")
+        }
+
+        @SlackActionListener(actionName = "name", actionValue = "value")
+        SlackReactionResponse thisIsExampleHandler4() {
             methodCalled = true
             new SlackReactionResponse("onion")
         }
