@@ -173,6 +173,7 @@ public class SlackService {
 
 
     synchronized void fireActionCallbacks(String userId, SlackMessage parentMessage, String actionName, String actionValue, String callbackId) {
+        logger.debug("Firing action event: {}.{}", actionName, actionValue, callbackId);
         actionCallbacks.forEach(actionCallback -> {
             try {
                 actionCallback.handleMessage(parentMessage, userId, actionName, actionValue);
