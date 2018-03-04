@@ -44,7 +44,7 @@ public class ActionController {
         String actionValue = Optional.of(payload)
                 .map(it -> it.get("actions"))
                 .map(it -> it.get(0))
-                .map(it -> it.get("name"))
+                .map(it -> it.get("value"))
                 .map(JsonNode::textValue)
                 .orElseThrow(IllegalArgumentException::new);
         String channelId = Optional.of(payload)
