@@ -44,6 +44,19 @@ public class SlackService {
         return slackMessage;
     }
 
+    public synchronized SlackMessage sendDirectMessage(String userId, String message, SlackActions slackActions) {
+        openSession();
+        SlackUser userById = slackSession.findUserById(userId);
+        SlackChannel channel = slackSession.openDirectMessageChannel(userById).getReply().getSlackChannel();
+        SlackPreparedMessage preparedMessage = new SlackPreparedMessage.Builder()
+                .withMessage(message)
+                .withAttachments(Collections.singletonList(slackActions.toAttachment()))
+                .build();
+        SlackMessageHandle<SlackMessageReply> messageHandle = slackSession.sendMessage(channel, preparedMessage);
+
+        return toChannelMessage(channel, messageHandle);
+    }
+
     public synchronized SlackMessage sendChannelMessage(String channelId, String message, SlackActions slackActions) {
         openSession();
         logger.debug("Sending message to: {}", channelId);
