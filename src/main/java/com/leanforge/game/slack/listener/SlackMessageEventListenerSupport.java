@@ -88,6 +88,9 @@ public class SlackMessageEventListenerSupport {
                 invoker.invoke(msg, msg.getSenderId(), txt, matcher);
             } catch (Exception e) {
                 logger.error("Can't handle message", e);
+                if (e instanceof ClassCastException) {
+                    return;
+                }
                 reportError(msg.getChannelId(), e);
             }
         });
@@ -109,6 +112,9 @@ public class SlackMessageEventListenerSupport {
                 invoker.invoke(msg, msg.getSenderId(), txt, matcher, threadId);
             } catch (Exception e) {
                 logger.error("Can't handle message", e);
+                if (e instanceof ClassCastException) {
+                    return;
+                }
                 reportError(msg.getChannelId(), e);
             }
         });
@@ -132,6 +138,9 @@ public class SlackMessageEventListenerSupport {
                 invoker.invoke(slackMessage, userId, actionValue, null);
             } catch (Exception e) {
                 logger.error("Can't handle message", e);
+                if (e instanceof ClassCastException) {
+                    return;
+                }
                 reportError(slackMessage.getChannelId(), e);
             }
         });
@@ -153,6 +162,9 @@ public class SlackMessageEventListenerSupport {
                 invoker.invoke(message, userId, null, null);
             } catch (Exception e) {
                 logger.error("Can't handle reaction", e);
+                if (e instanceof ClassCastException) {
+                    return;
+                }
                 reportError(message.getChannelId(), e);
             }
         };
