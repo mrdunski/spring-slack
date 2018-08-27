@@ -2,6 +2,8 @@ package com.leanforge.game.slack;
 
 import com.ullink.slack.simpleslackapi.*;
 import com.ullink.slack.simpleslackapi.replies.SlackMessageReply;
+import com.ullink.slack.simpleslackapi.replies.SlackReply;
+import com.ullink.slack.simpleslackapi.replies.SlackReplyImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -210,11 +212,24 @@ public class SlackService {
         }
     }
 
-    private SlackMessage toChannelMessage(SlackChannel channel, SlackMessageHandle<SlackMessageReply> messageHandle) {
-        String timestamp = messageHandle.getReply().getTimestamp();
-        String channelId = channel.getId();
+    private SlackMessage toChannelMessage(SlackChannel channel, SlackMessageHandle messageHandle) {
+        SlackReply reply = messageHandle.getReply();
+        if (reply instanceof SlackMessageReply) {
+            SlackMessageReply messageReply = (SlackMessageReply) reply;
+            String timestamp = messageReply.getTimestamp();
+            String channelId = channel.getId();
 
-        return new SlackMessage(timestamp, channelId, null);
+            return new SlackMessage(timestamp, channelId, null);
+        }
+
+        if (reply instanceof SlackReplyImpl) {
+            SlackReplyImpl slackReply = (SlackReplyImpl) reply;
+            String msg = slackReply.getErrorMessage();
+
+            throw new IllegalStateException("Slack error: " + msg);
+        }
+
+        throw new IllegalStateException("Unknown response type: "  + reply.toString());
     }
 
     public String getRealNameByUsername(String username) {
